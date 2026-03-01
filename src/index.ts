@@ -2,9 +2,10 @@ import express from 'express';
 
 const app = express();
 const PORT = 5000;
+app.use(express.json());
 
 app.get('/', (req, res) => {
-	res.send('Server is running');
+	res.send('Logist backend is running');
 });
 
 app.listen(PORT, () => {
