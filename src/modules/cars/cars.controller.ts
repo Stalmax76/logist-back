@@ -6,7 +6,7 @@ import {
 	removeCarById,
 	updateCar,
 	findCarById,
-} from '../services/cars.services';
+} from './cars.service';
 
 export async function updateCarById(req: Request, res: Response) {
 	try {

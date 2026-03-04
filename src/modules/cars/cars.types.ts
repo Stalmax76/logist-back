@@ -6,4 +6,4 @@ interface NewCar {
 	status: string;
 }
 
-export { NewCar };
+export type { NewCar };

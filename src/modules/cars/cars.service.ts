@@ -1,5 +1,5 @@
-import { db } from '../config/db';
-import { NewCar } from '../types/interfaces';
+import { db } from '../../config/db';
+import { NewCar } from './cars.types';
 
 export async function findCarById(id: number) {
 	const [rows]: any = await db.query('SELECT * FROM cars WHERE id = ?', [id]);
