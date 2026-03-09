@@ -1,18 +1,24 @@
-import { db } from '../../config/db';
-import { NewCar } from './cars.types';
+import { db } from '../../config/db.ts';
+import type { CreateCarDto, UpdateCarDto } from './car.schema.ts';
 
 export async function findCarById(id: number) {
 	const [rows]: any = await db.query('SELECT * FROM cars WHERE id = ?', [id]);
 	return rows[0] || null;
 }
 
-export async function updateCar(id: number, data: NewCar) {
+export async function updateCar(id: number, data: UpdateCarDto) {
 	const { plate, model, type, capacity, status } = data;
+	const fields = [];
+	const values = [];
+	for (const [key, value] of Object.entries(data)) {
+		if (value === undefined) continue;
+		fields.push(`${key} = ?`);
+		values.push(value);
+	}
+	if (fields.length === 0) return;
+	values.push(id);
 
-	await db.query(
-		'UPDATE cars SET plate = ?, model = ?, type = ?, capacity = ?, status = ? WHERE id = ?',
-		[plate, model, type, capacity, status, id]
-	);
+	await db.query(`UPDATE cars SET ${fields.join(', ')} WHERE id = ?`, values);
 }
 
 export async function removeCarById(id: number) {
@@ -34,8 +40,8 @@ export async function getAllCars() {
 		throw error;
 	}
 }
-export async function addCar(car: NewCar) {
-	const { plate, model, type = 'bus-3500', capacity = 0, status = 'avilable' } = car;
+export async function addCar(car: CreateCarDto) {
+	const { plate, model, type = 'bus-3500', capacity = 0, status = 'available' } = car;
 
 	const [result]: any = await db.query(
 		'INSERT INTO cars(model,plate, capacity, type, status) VALUES(?, ?, ?, ?, ?)',

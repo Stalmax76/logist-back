@@ -1,4 +1,5 @@
-import { Request, Response } from 'express';
+import z from 'zod';
+import type { Request, Response } from 'express';
 import {
 	getAllCars,
 	addCar,
@@ -6,24 +7,32 @@ import {
 	removeCarById,
 	updateCar,
 	findCarById,
-} from './cars.service';
+} from './cars.service.ts';
+
+import { createCarSchema, updateCarSchema } from './car.schema.ts';
 
 export async function updateCarById(req: Request, res: Response) {
 	try {
 		const id = Number(req.params.id);
-		const { plate, model, type, capacity, status } = req.body;
-
+		if (isNaN(id)) {
+			return res.status(400).json({ error: 'Invalid car ID' });
+		}
 		// check if car exists
 		const existingCar = await findCarById(id);
 		if (!existingCar) {
 			return res.status(404).json({ error: 'Car not found' });
 		}
 
-		await updateCar(id, { plate, model, type, capacity, status });
+		const dto = updateCarSchema.parse(req.body);
+
+		await updateCar(id, dto);
 		const cars = await getAllCars();
 
 		res.json({ message: 'Car updated successfully', id, cars });
-	} catch (error) {
+	} catch (error: any) {
+		if (error.name === 'ZodError') {
+			return res.status(400).json({ error: error.errors });
+		}
 		console.error('error in updateCarById:', error);
 		res.status(500).json({ error: 'Internal server error' });
 	}
@@ -32,7 +41,10 @@ export async function updateCarById(req: Request, res: Response) {
 // ========== delete car by id ===========
 export async function deleteCarById(req: Request, res: Response) {
 	try {
-		const { id } = req.params;
+		const id = Number(req.params.id);
+		if (isNaN(id)) {
+			return res.status(400).json({ error: 'Invalid car ID' });
+		}
 
 		const deleted = await removeCarById(Number(id));
 
@@ -53,6 +65,9 @@ export async function deleteCarById(req: Request, res: Response) {
 export async function getCarByPlate(reg: Request, res: Response) {
 	try {
 		const { plate } = reg.params as { plate: string }; //plate is a string;
+		if (!plate) {
+			return res.status(400).json({ error: 'Plate is required' });
+		}
 
 		const car = await findCarByPlate(plate);
 
@@ -72,6 +87,7 @@ export async function getCars(req: Request, res: Response) {
 		const cars = await getAllCars();
 		res.json(cars);
 	} catch (error) {
+		console.error('Get cars error:', error);
 		res.status(500).json({ error: 'Internal server error' });
 	}
 }
@@ -79,22 +95,22 @@ export async function getCars(req: Request, res: Response) {
 // ======== create car ========
 export async function createCar(req: Request, res: Response) {
 	try {
-		const { plate, model, type, capacity, status } = req.body;
-
-		if (!model || !plate) {
-			return res.status(400).json({ error: 'Model and plate are required' });
-		}
-
-		const newCarId = await addCar({ plate, model, type, capacity, status });
-		res.status(201).json({
-			message: `Car with plate ${plate} created successfully`,
-			id: newCarId,
-		});
-	} catch (error: any) {
-		if (error.code === 'ER_DUP_ENTRY') {
+		const dto = createCarSchema.parse(req.body);
+		const existing = await findCarByPlate(dto.plate);
+		if (existing) {
 			return res.status(400).json({ error: 'Car with this plate already exists' });
 		}
 
+		const newCarId = await addCar(dto);
+		res.status(201).json({
+			message: `Car with plate ${dto.plate} created successfully`,
+			id: newCarId,
+		});
+	} catch (error: any) {
+		if (error.name === 'ZodError') {
+			return res.status(400).json({ error: error.errors });
+		}
+		console.error('Create error:', error);
 		res.status(500).json({ error: 'Internal server error' });
 	}
 }

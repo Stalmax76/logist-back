@@ -1,9 +1,13 @@
 export interface User {
-	id?: number;
-	name: string;
+	id: number;
+	employee__number: string;
+	first_name: string;
+	last_name: string;
 	phone?: string;
-	email?: string;
+	email: string;
 	password_hash: string;
-	role: 'admin' | 'driver';
-	active?: boolean;
+	is_active: boolean;
+	role: 'admin' | 'driver' | 'manager';
+	created_at: string;
+	updated_at: string;
 }

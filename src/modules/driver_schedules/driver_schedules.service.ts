@@ -1,7 +1,11 @@
-import { db } from '../../config/db';
-import type { DriverSchedule } from './driver_schedules.types';
+import { db } from '../../config/db.ts';
+import type {
+	CreateDriverScheduleDto,
+	UpdateDriverScheduleDto,
+	DriverSchedule,
+} from './driver_schedules.types.ts';
 
-export async function addDriverSchedule(data: DriverSchedule) {
+export async function addDriverSchedule(data: CreateDriverScheduleDto) {
 	const [result]: any = await db.query(
 		`INSERT INTO driver_schedules
     (driver_id, date, type, planned_hours, actual_hours, is_auto_generated, notes, status)
@@ -9,24 +13,28 @@ export async function addDriverSchedule(data: DriverSchedule) {
 		[
 			data.driver_id,
 			data.date,
-			data.type ?? 'work',
+			data.type,
 			data.planned_hours ?? 0,
-			data.actual_hours ?? 0,
-			data.is_auto_generated ?? false,
+			0,
+			false,
 			data.notes ?? null,
-			data.status ?? 'planned',
+			'planned',
 		]
 	);
-
-	return { id: result.insertId, ...data };
+	const created = await getDriverScheduleById(result.insertId);
+	return created!;
 }
 
-export async function getDriverScheduleById(id: number) {
+export async function getDriverScheduleById(id: number): Promise<DriverSchedule | null> {
 	const [rows]: any = await db.query(`SELECT * FROM driver_schedules WHERE id = ?`, [id]);
 	return rows[0] || null;
 }
 
-export async function getDriverSchedulesByDriver(driver_id: number, from?: string, to?: string) {
+export async function getDriverSchedulesByDriver(
+	driver_id: number,
+	from?: string,
+	to?: string
+): Promise<DriverSchedule[]> {
 	let sql = `SELECT * FROM driver_schedules WHERE driver_id = ?`;
 	const params: any[] = [driver_id];
 
@@ -45,7 +53,7 @@ export async function getDriverSchedulesByDriver(driver_id: number, from?: strin
 	return rows;
 }
 
-export async function updateDriverSchedule(id: number, data: Partial<DriverSchedule>) {
+export async function updateDriverSchedule(id: number, data: UpdateDriverScheduleDto) {
 	const [result]: any = await db.query(`UPDATE driver_schedules SET ? WHERE id = ?`, [data, id]);
 	return result;
 }

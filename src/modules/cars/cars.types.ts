@@ -1,4 +1,4 @@
-interface NewCar {
+interface Car {
 	plate: string;
 	model: string;
 	type?: string;
@@ -6,4 +6,4 @@ interface NewCar {
 	status: string;
 }
 
-export type { NewCar };
+export type { Car };

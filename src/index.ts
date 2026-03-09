@@ -1,9 +1,9 @@
 import express from 'express';
-import carsRouter from './modules/cars/cars.routes';
-import usersRouter from './modules/users/users.routes';
-import routesRouter from './modules/routes/routes.routes';
-import routeLogRouter from './modules/route_logs/route_logs.routes';
-import driverScheduleRouter from './modules/driver_schedule/driver_schedules.routes';
+import carsRouter from './modules/cars/cars.routes.ts';
+import usersRouter from './modules/users/users.routes.ts';
+import routesRouter from './modules/routes/routes.routes.ts';
+import routeLogRouter from './modules/route_logs/route_logs.routes.ts';
+import driverSchedulesRouter from './modules/driver_schedules/driver_schedules.routes.ts';
 
 const app = express();
 const PORT = 5000;
@@ -14,7 +14,7 @@ app.use('/routes', routesRouter);
 app.use('/cars', carsRouter);
 app.use('/users', usersRouter);
 app.use('/route_logs', routeLogRouter);
-app.use('/driver_schedules', driverScheduleRouter);
+app.use('/driver_schedules', driverSchedulesRouter);
 
 app.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}`);

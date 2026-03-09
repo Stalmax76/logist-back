@@ -5,8 +5,8 @@ export interface RouteLog {
 	start_time: string;
 	end_time: string;
 	actual_hours?: number | null;
-	status?: 'draft' | 'submitted' | 'approved' | 'cancelled' | 'delayed';
-	distance_traveled: number | null;
+	status: 'draft' | 'submitted' | 'approved' | 'cancelled' | 'delayed';
+	distance_traveled?: number | null;
 	fuel_used?: number | null;
 	notes?: string | null;
 	created_at?: string | null;

@@ -8,7 +8,8 @@ export interface Route {
 	route_number: string;
 	planned_km?: number;
 	planned_hours?: number;
-	status?: 'planned' | 'in_progress' | 'completed' | 'approved' | 'cancelled';
+	status: 'planned' | 'in_progress' | 'completed' | 'approved' | 'cancelled' | 'deleted';
+
 	created_at?: string;
 	updated_at?: string;
 }
