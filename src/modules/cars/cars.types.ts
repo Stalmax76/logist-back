@@ -1,9 +1,9 @@
 interface Car {
 	plate: string;
 	model: string;
-	type?: string;
+	type: string;
 	capacity: number;
-	status: string;
+	status: 'available' | 'on_route' | 'repair';
 }
 
 export type { Car };

@@ -15,7 +15,7 @@ export async function updateCar(id: number, data: UpdateCarDto) {
 		fields.push(`${key} = ?`);
 		values.push(value);
 	}
-	if (fields.length === 0) return;
+	if (fields.length === 0) return 0;
 	values.push(id);
 
 	await db.query(`UPDATE cars SET ${fields.join(', ')} WHERE id = ?`, values);
@@ -41,7 +41,7 @@ export async function getAllCars() {
 	}
 }
 export async function addCar(car: CreateCarDto) {
-	const { plate, model, type = 'bus-3500', capacity = 0, status = 'available' } = car;
+	const { plate, model, type, capacity, status } = car;
 
 	const [result]: any = await db.query(
 		'INSERT INTO cars(model,plate, capacity, type, status) VALUES(?, ?, ?, ?, ?)',

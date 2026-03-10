@@ -26,9 +26,11 @@ export async function updateCarById(req: Request, res: Response) {
 		const dto = updateCarSchema.parse(req.body);
 
 		await updateCar(id, dto);
-		const cars = await getAllCars();
+		const updatedCar = await findCarById(id);
 
-		res.json({ message: 'Car updated successfully', id, cars });
+		res.json({
+			message: `Car ID ${updatedCar.id}, plate ${updatedCar.plate} updated successfully`,
+		});
 	} catch (error: any) {
 		if (error.name === 'ZodError') {
 			return res.status(400).json({ error: error.errors });
@@ -111,6 +113,23 @@ export async function createCar(req: Request, res: Response) {
 			return res.status(400).json({ error: error.errors });
 		}
 		console.error('Create error:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+}
+
+export async function getCarById(req: Request, res: Response) {
+	try {
+		const id = Number(req.params.id);
+		if (isNaN(id)) {
+			return res.status(400).json({ error: 'Invalid car ID' });
+		}
+		const car = await findCarById(id);
+		if (!car) {
+			return res.status(404).json({ error: 'Car not found' });
+		}
+		res.json(car);
+	} catch (error) {
+		console.error('Error getting car by ID:', error);
 		res.status(500).json({ error: 'Internal server error' });
 	}
 }
