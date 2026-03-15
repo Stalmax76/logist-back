@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
 import { db } from '../../config/db.ts';
@@ -6,18 +6,28 @@ import type { CreateUserDto, UpdateUserDto } from './users.schema.ts';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
+// get one user by email
+export async function getUserByEmail(email: string) {
+	const [rows]: any = await db.query('SELECT * FROM users WHERE email = ?  LIMIT 1', [email]);
+
+	return rows[0];
+}
+
 export async function loginUser(email: string, password: string) {
 	const user = await getUserByEmail(email);
 	if (!user) {
 		throw new Error('User not found');
 	}
-	if (user.deleted_at !== null) {
+	if (user.deleted_at !== null || user.is_active === 0) {
 		throw new Error('User is deactivated');
 	}
+	// console.log('LOGIN DEBUG:', { password, hash: user.password_hash });
 	const isValid = await bcrypt.compare(password, user.password_hash);
+
 	if (!isValid) {
 		throw new Error('Invalid password');
 	}
+
 	const token = jwt.sign(
 		{
 			id: user.id,
@@ -28,6 +38,7 @@ export async function loginUser(email: string, password: string) {
 		{ expiresIn: '7d' }
 	);
 	return {
+		message: 'Login successful',
 		token,
 		user: {
 			id: user.id,
@@ -44,8 +55,11 @@ export async function loginUser(email: string, password: string) {
 }
 
 // request password reset
-export async function requestPasswordReset(email: string) {
-	const user = await getUserByEmail(email);
+export async function requestPasswordReset(email?: string, phone?: string) {
+	let user = null;
+
+	if (email) user = await getUserByEmail(email);
+	if (!user && phone) user = await getUserByPhone(phone);
 
 	if (!user) {
 		throw new Error('User not found');
@@ -65,7 +79,7 @@ export async function requestPasswordReset(email: string) {
 
 export async function resetPassword(token: string, newPassword: string) {
 	const [rows]: any = await db.query(
-		`SELECT * FROM users WHERE reset_token=? AND reset_expires > NOW()`,
+		`SELECT * FROM users WHERE reset_token=? AND reset_expires > NOW() AND deleted_at IS NULL AND is_active = 1 LIMIT 1`,
 		[token]
 	);
 
@@ -87,6 +101,18 @@ export async function resetPassword(token: string, newPassword: string) {
 
 // create user
 export async function addUser(data: CreateUserDto) {
+	const existingEmail = await getUserByEmail(data.email);
+
+	if (existingEmail) {
+		throw new Error('Email already exists');
+	}
+
+	if (data.phone) {
+		const existingPhone = await getUserByPhone(data.phone);
+		if (existingPhone) {
+			throw new Error('Phone already exists');
+		}
+	}
 	// хешуємо пароль
 	const password_hash = await bcrypt.hash(data.password, 10);
 	const [result]: any = await db.query(
@@ -117,24 +143,43 @@ export async function getAllUsers() {
 // get one user by id
 export async function getUser(id: number) {
 	const [rows]: any = await db.query(
-		'SELECT id, first_name, last_name, phone, email, role, is_active, created_at, updated_at, deleted_at FROM users WHERE id = ? AND deleted_at IS NULL',
+		'SELECT id, first_name, last_name, phone, email, role, is_active, created_at, updated_at, deleted_at FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1',
 		[id]
 	);
 	return rows[0];
 }
 
-// get one user by email
-export async function getUserByEmail(email: string) {
+// get one user by phone
+export async function getUserByPhone(phone: string) {
 	const [rows]: any = await db.query(
-		'SELECT * FROM users WHERE email = ? AND deleted_at IS NULL',
-		[email]
+		'SELECT * FROM users WHERE phone = ? AND deleted_at IS NULL LIMIT 1',
+		[phone]
 	);
 
-	return rows[0];
+	return rows[0] || null;
 }
 
 // update user(partial)
 export async function updateUserById(id: number, data: UpdateUserDto) {
+	const currentUser = await getUser(id);
+	if (!currentUser) {
+		throw new Error('User not found');
+	}
+
+	if (data.email && data.email !== currentUser.email) {
+		const existingEmail = await getUserByEmail(data.email);
+		if (existingEmail && existingEmail.id !== id) {
+			throw new Error('Email already exists');
+		}
+	}
+
+	if (data.phone && data.phone !== currentUser.phone) {
+		const existingPhone = await getUserByPhone(data.phone);
+		if (existingPhone && existingPhone.id !== id) {
+			throw new Error('Phone already exists');
+		}
+	}
+
 	const fields: string[] = [];
 	const values: any[] = [];
 
@@ -157,7 +202,7 @@ export async function updateUserById(id: number, data: UpdateUserDto) {
 	values.push(id);
 
 	await db.query(
-		`UPDATE users SET ${fields.join(', ')} WHERE id=? AND deleted_at IS NULL`,
+		`UPDATE users SET ${fields.join(', ')} WHERE id=? AND deleted_at IS NULL LIMIT 1`,
 		values
 	);
 	return getUser(id);
@@ -166,7 +211,7 @@ export async function updateUserById(id: number, data: UpdateUserDto) {
 // deactivate user
 export async function deactivateUserById(id: number) {
 	await db.query(
-		`UPDATE users SET is_active = 0, deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL`,
+		`UPDATE users SET is_active = 0, deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
 		[id]
 	);
 	return getUser(id);
@@ -174,6 +219,6 @@ export async function deactivateUserById(id: number) {
 
 // activate user
 export async function activateUserById(id: number) {
-	await db.query(`UPDATE users SET is_active = 1, deleted_at = NULL WHERE id = ?`, [id]);
+	await db.query(`UPDATE users SET is_active = 1, deleted_at = NULL WHERE id = ? LIMIT 1`, [id]);
 	return getUser(id);
 }

@@ -13,7 +13,50 @@ import {
 } from './users.service.ts';
 
 import { createUserSchema, updateUserSchema } from './users.schema.ts';
+import type { User } from './user.types.ts';
 
+// ----------------- GET ALL USERS -----------------
+export async function getUsers(req: Request, res: Response) {
+	try {
+		const role: string = req.user!.role;
+		if (role === 'manager') {
+			const users = await getAllUsers();
+			return res.json(users.filter((u: User) => u.deleted_at === null));
+		}
+		if (role === 'admin') {
+			const users = await getAllUsers();
+			return res.json(users);
+		}
+
+		return res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+}
+
+// ----------------- GET USER BY ID -----------------
+export async function getUserById(req: Request, res: Response) {
+	try {
+		const id = Number(req.params.id);
+		if (isNaN(id)) return res.status(400).json({ error: 'Invalid user id' });
+		const requester = req.user!;
+
+		if (requester.role === 'driver' && requester.id !== id) {
+			return res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+		}
+
+		const user = await getUser(id);
+		if (!user) {
+			return res.status(404).json({ error: 'User not found' });
+		}
+
+		res.json(user);
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+}
 // ----------------- CREATE USER -----------------
 export async function createUser(req: Request, res: Response) {
 	try {
@@ -29,46 +72,28 @@ export async function createUser(req: Request, res: Response) {
 	}
 }
 
-// ----------------- GET ALL USERS -----------------
-export async function getUsers(req: Request, res: Response) {
-	try {
-		const users = await getAllUsers();
-		res.json(users);
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ error: 'Internal server error' });
-	}
-}
-
-// ----------------- GET USER BY ID -----------------
-export async function getUserById(req: Request, res: Response) {
-	try {
-		const id = Number(req.params.id);
-		if (isNaN(id)) return res.status(400).json({ error: 'Invalid user id' });
-
-		const user = await getUser(id);
-		if (!user) {
-			return res.status(404).json({ error: 'User not found' });
-		}
-
-		res.json(user);
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ error: 'Internal server error' });
-	}
-}
-
 // ----------------- UPDATE USER -----------------
 export async function updateUser(req: Request, res: Response) {
 	try {
 		const id = Number(req.params.id);
-		if (isNaN(id)) return res.status(400).json({ error: 'Invalid user ID' });
+		if (isNaN(id)) return res.status(400).json({ error: 'Invalid user id' });
+		const requester = req.user!;
+
+		if (requester.role === 'driver' && requester.id !== id) {
+			return res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+		}
+
+		if (requester.role === 'manager') {
+			const target = await getUser(id);
+			if (target?.role === 'admin') {
+				return res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+			}
+		}
 
 		// Валідація даних для оновлення (partial)
 		const parsedData = updateUserSchema.parse(req.body);
 
 		const updatedUser = await updateUserById(id, parsedData);
-		if (!updatedUser) return res.status(404).json({ error: 'User not found' });
 
 		res.json(updatedUser);
 	} catch (error) {
@@ -84,10 +109,8 @@ export async function updateUser(req: Request, res: Response) {
 export async function deactivateUser(req: Request, res: Response) {
 	try {
 		const id = Number(req.params.id);
-		if (isNaN(id)) return res.status(400).json({ error: 'Invalid user ID' });
-
+		if (isNaN(id)) return res.status(400).json({ error: 'Invalid user id' });
 		await deactivateUserById(id);
-
 		res.json({ message: 'User deactivated successfully', user_id: id });
 	} catch (error) {
 		console.error(error);
@@ -99,8 +122,7 @@ export async function deactivateUser(req: Request, res: Response) {
 export async function activateUser(req: Request, res: Response) {
 	try {
 		const id = Number(req.params.id);
-		if (isNaN(id)) return res.status(400).json({ error: 'Invalid user ID' });
-
+		if (isNaN(id)) return res.status(400).json({ error: 'Invalid user id' });
 		const user = await activateUserById(id);
 
 		res.json({ message: 'User activated successfully', user });
