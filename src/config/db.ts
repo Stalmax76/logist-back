@@ -5,4 +5,5 @@ export const db = mysql.createPool({
 	password: 'root',
 	database: 'logist_db',
 	port: 3306,
+	dateStrings: true,
 });

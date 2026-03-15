@@ -11,13 +11,19 @@ import {
 	createDriverScheduleSchema,
 } from './driver_schedules.schema.ts';
 import { validate } from '../../middleware/validate.ts';
+import { authMiddleware } from '../../middleware/auth.ts';
 
 const router = Router();
 
-router.post('/', validate(createDriverScheduleSchema), createSchedule);
-router.get('/driver/:driver_id', getDriverSchedules);
-router.get('/:id', getDriverSchedule);
-router.patch('/:id', validate(updateDriverScheduleSchema), updateDriverScheduleHelper);
-router.delete('/:id', removeDriverSchedule);
+router.post('/', authMiddleware, validate(createDriverScheduleSchema), createSchedule);
+router.get('/driver/:driver_id', authMiddleware, getDriverSchedules);
+router.get('/:id', authMiddleware, getDriverSchedule);
+router.patch(
+	'/:id',
+	authMiddleware,
+	validate(updateDriverScheduleSchema),
+	updateDriverScheduleHelper
+);
+router.delete('/:id', authMiddleware, removeDriverSchedule);
 
 export default router;

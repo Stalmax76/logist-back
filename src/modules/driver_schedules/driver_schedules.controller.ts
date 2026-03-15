@@ -13,16 +13,30 @@ import {
 	updateDriverScheduleSchema,
 } from './driver_schedules.schema.ts';
 
+import { validateShiftTimes } from './validators/scheduleTime.ts';
+
 export async function createSchedule(req: Request, res: Response) {
 	try {
-		// validate input
-		const parsed = createDriverScheduleSchema.parse(req.body);
-		const driver = await getUser(parsed.driver_id);
-		if (!driver) {
-			return res.status(404).json({ error: 'Driver does not exist' });
+		const userId = req.user!.id; // middleware auth
+		const userRole = req.user!.role;
+
+		// driver can't create schedules
+		if (userRole === 'driver') {
+			return res.status(403).json({ error: 'Drivers cannot create schedules' });
 		}
 
-		const schedule = await addDriverSchedule(parsed);
+		const parsed = createDriverScheduleSchema.parse(req.body);
+
+		const driver = await getUser(parsed.driver_id);
+		if (!driver || !driver.is_active) {
+			return res.status(404).json({ error: 'Driver does not exist or is inactive' });
+		}
+		const timeCheck = validateShiftTimes(parsed.shift_start_time, parsed.shift_end_time);
+		if (!timeCheck.valid) {
+			return res.status(400).json({ error: timeCheck.message });
+		}
+
+		const schedule = await addDriverSchedule(parsed, userId);
 		res.status(201).json(schedule);
 	} catch (error: any) {
 		if (error.name === 'ZodError') {
@@ -30,12 +44,10 @@ export async function createSchedule(req: Request, res: Response) {
 		}
 		console.error('Error creating driver schedule:', error);
 		res.status(500).json({ error: 'Failed to create driver schedule' });
-		console.error(error);
 	}
 }
 
 // Get By ID
-
 export async function getDriverSchedule(req: Request, res: Response) {
 	try {
 		const schedule = await getDriverScheduleById(Number(req.params.id));
@@ -72,10 +84,32 @@ export async function getDriverSchedules(req: Request, res: Response) {
 
 export async function updateDriverScheduleHelper(req: Request, res: Response) {
 	try {
-		// validate input
+		const userId = req.user!.id;
+		const userRole = req.user!.role;
 		const parsed = updateDriverScheduleSchema.parse(req.body);
+		const schedule = await getDriverScheduleById(Number(req.params.id));
 
-		await updateDriverSchedule(Number(req.params.id), parsed);
+		if (!schedule) {
+			return res.status(404).json({ error: 'Driver schedule not found' });
+		}
+		if (userRole === 'driver' && schedule.driver_id !== userId) {
+			return res.status(403).json({ error: 'Drivers cannot edit other drivers schedules' });
+		}
+		if (userRole === 'manager') {
+			const driver = await getUser(schedule.driver_id);
+			if (driver?.created_by !== userId) {
+				return res
+					.status(403)
+					.json({ error: 'Manager cannot edit schedules of other managers' });
+			}
+		}
+
+		const timeCheck = validateShiftTimes(parsed.shift_start_time, parsed.shift_end_time);
+		if (!timeCheck.valid) {
+			return res.status(400).json({ error: timeCheck.message });
+		}
+
+		await updateDriverSchedule(Number(req.params.id), parsed, userId);
 		res.json({ message: 'Driver schedule updated' });
 	} catch (error: any) {
 		if (error.name === 'ZodError') {
@@ -89,7 +123,17 @@ export async function updateDriverScheduleHelper(req: Request, res: Response) {
 // Delete
 export async function removeDriverSchedule(req: Request, res: Response) {
 	try {
-		await deleteDriverSchedule(Number(req.params.id));
+		const userId = req.user!.id;
+		const userRole = req.user!.role;
+		const schedule = await getDriverScheduleById(Number(req.params.id));
+
+		if (!schedule) {
+			return res.status(404).json({ error: 'Driver schedule not found' });
+		}
+		if (userRole === 'driver') {
+			return res.status(403).json({ error: 'Drivers cannot delete schedules' });
+		}
+		await deleteDriverSchedule(Number(req.params.id), userId);
 		res.json({ message: 'Driver schedule deleted' });
 	} catch (error) {
 		console.error('Error deleting driver schedule:', error);
