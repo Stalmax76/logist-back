@@ -110,7 +110,9 @@ export async function updateDriverScheduleHelper(req: Request, res: Response) {
 		}
 
 		await updateDriverSchedule(Number(req.params.id), parsed, userId);
-		res.json({ message: 'Driver schedule updated' });
+
+		const updatedSchedule = await getDriverScheduleById(Number(req.params.id));
+		res.json({ schedule: updatedSchedule, message: 'Driver schedule updated' });
 	} catch (error: any) {
 		if (error.name === 'ZodError') {
 			return res.status(400).json({ error: error.errors });

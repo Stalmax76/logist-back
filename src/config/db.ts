@@ -6,4 +6,5 @@ export const db = mysql.createPool({
 	database: 'logist_db',
 	port: 3306,
 	dateStrings: true,
+	decimalNumbers: true,
 });
