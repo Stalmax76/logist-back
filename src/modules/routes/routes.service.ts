@@ -1,5 +1,6 @@
 import { db } from '../../config/db.ts';
-
+import { logRouteChange } from '../route_logs/route_logs.middleware.ts';
+import { createRouteLog } from '../route_logs/route_logs.service.ts';
 import type { CreateRouteDto, UpdateRouteDto } from './routes.schema.ts';
 import type { User } from '../users/user.types.ts';
 
@@ -67,7 +68,20 @@ export async function addRoute(data: CreateRouteDto, user: User) {
 		]
 	);
 
-	return getRouteById(result.insertId);
+	const created = await getRouteById(result.insertId);
+	await createRouteLog({
+		route_id: created.id,
+		user_id: user.id,
+		user_role: user.role,
+		action: 'create',
+		before_data: null,
+		after_data: created,
+		status_before: null,
+		status_after: created.status,
+		comment: null,
+	});
+
+	return created;
 }
 
 export async function getAllRoutes() {
@@ -166,7 +180,12 @@ export async function updateRouteById(id: number, data: UpdateRouteDto, user: Us
 
 	await db.query(`UPDATE routes SET ${fields} WHERE id = ?`, [...values, id]);
 
-	return getRouteById(id);
+	const updated = await getRouteById(id);
+
+	// log route change
+	await logRouteChange(route, updated, user);
+
+	return updated;
 }
 
 /* ----------------------------- STATUS UPDATE ----------------------------- */
@@ -204,7 +223,12 @@ export async function updateRouteStatus(id: number, status: string, user: User) 
 
 	await db.query(`UPDATE routes SET status = ? WHERE id = ?`, [status, id]);
 
-	return getRouteById(id);
+	const updated = await getRouteById(id);
+
+	// log route change
+	await logRouteChange(route, updated, user);
+
+	return updated;
 }
 
 /* ----------------------------- APPROVE / CANCEL ----------------------------- */
@@ -226,7 +250,12 @@ export async function approveRoute(id: number, user: User) {
 
 	await db.query(`UPDATE routes SET status = 'approved' WHERE id = ?`, [id]);
 
-	return getRouteById(id);
+	const updated = await getRouteById(id);
+
+	// log route change
+	await logRouteChange(route, updated, user);
+
+	return updated;
 }
 
 export async function cancelRoute(id: number, user: User) {
@@ -241,7 +270,12 @@ export async function cancelRoute(id: number, user: User) {
 
 	await db.query(`UPDATE routes SET status = 'cancelled' WHERE id = ?`, [id]);
 
-	return getRouteById(id);
+	const updated = await getRouteById(id);
+
+	// log route change
+	await logRouteChange(route, updated, user);
+
+	return updated;
 }
 
 /* ----------------------------- DELETE ----------------------------- */
@@ -256,5 +290,10 @@ export async function deleteRouteById(id: number, user: User) {
 
 	await db.query(`UPDATE routes SET status = 'deleted' WHERE id = ?`, [id]);
 
-	return getRouteById(id);
+	const updated = await getRouteById(id);
+
+	// log route change
+	await logRouteChange(route, updated, user);
+
+	return updated;
 }

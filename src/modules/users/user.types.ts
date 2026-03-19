@@ -1,3 +1,5 @@
+export type UserRole = 'admin' | 'driver' | 'manager';
+
 export interface User {
 	id: number;
 	first_name: string;
@@ -5,7 +7,7 @@ export interface User {
 	phone?: string | null;
 	email: string;
 	password_hash: string;
-	role: 'admin' | 'driver' | 'manager';
+	role: UserRole;
 	is_active: boolean;
 	created_at: string;
 	updated_at: string;
