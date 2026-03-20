@@ -100,6 +100,7 @@ export async function updateRoute(req: Request, res: Response) {
 	}
 }
 
+// ----------------- CHANGE ROUTE STATUS -----------------
 export async function changeStatus(req: Request, res: Response) {
 	try {
 		const user = req.user;
@@ -124,6 +125,7 @@ export async function changeStatus(req: Request, res: Response) {
 	}
 }
 
+// ----------------- DELETE ROUTE -----------------
 export async function deleteRoute(req: Request, res: Response) {
 	try {
 		const user = req.user;
@@ -142,5 +144,16 @@ export async function deleteRoute(req: Request, res: Response) {
 
 		console.error('Delete route error:', error);
 		return res.status(400).json({ error: error.message });
+	}
+}
+
+// ----------------- GET MY ROUTES -----------------
+export async function getMyRoutes(req: Request, res: Response) {
+	try {
+		const driverId = req.user?.id;
+		const routes = await getRoutesByDriver(driverId!);
+		return res.json(routes);
+	} catch (error: any) {
+		return res.status(500).json({ error: error.message });
 	}
 }
