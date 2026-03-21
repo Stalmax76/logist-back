@@ -1,0 +1,6 @@
+CREATE TABLE helpers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(50),
+    created_at TIMESTAMP DEFAULT NOW()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
