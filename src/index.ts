@@ -7,6 +7,7 @@ import driverSchedulesRouter from './modules/driver_schedules/driver_schedules.r
 import authRouter from './modules/auth/auth.routs.ts';
 import driverDaysOffRoutes from './modules/driver_days_off/driver_days_off.routes.ts';
 import helperRoutes from './modules/helpers/helpers.routes.ts';
+import routeHelpersRoutes from './modules/route_helpers/route_helpers.routes.ts';
 
 const app = express();
 const PORT = 5000;
@@ -21,6 +22,7 @@ app.use('/route_logs', routeLogRouter);
 app.use('/driver_schedules', driverSchedulesRouter);
 app.use('/driver_days_off', driverDaysOffRoutes);
 app.use('/helpers', helperRoutes);
+app.use('/route_helpers', routeHelpersRoutes);
 
 app.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}`);
