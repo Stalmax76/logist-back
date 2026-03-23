@@ -1,13 +1,7 @@
 // -----------------------------
 // 1. Type of report
 // -----------------------------
-export type ReportPeriodType = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
-
-export interface ReportPeriod {
-	type: ReportPeriodType;
-	from: Date;
-	to: Date;
-}
+import type { ReportPeriod } from '../../utills/date/period.ts';
 
 // -----------------------------
 // 2. Type of report target
@@ -60,6 +54,7 @@ export interface HelperStats {
 // -----------------------------
 export interface OvertimeStats {
 	totalOvertimeHours: number;
+	totalOvertimeKm: number;
 	overtimeRoutesCount: number;
 }
 
