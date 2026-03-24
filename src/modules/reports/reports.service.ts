@@ -1,4 +1,5 @@
 import { db } from '../../config/db.ts';
+
 import { resolvePeriod } from './filters/period.filter.ts';
 import type { ReportPeriod } from '../../utills/date/period.ts';
 import type {
@@ -8,7 +9,15 @@ import type {
 	HelperStats,
 	OvertimeStats,
 	DriverEfficiency,
-} from './reports.types.ts';
+} from './driver_reports.types.ts';
+import type {
+	CarReport,
+	CarInfo,
+	CarSummary,
+	CarRouteEntry,
+	CarDriverStats,
+	CarEfficiency,
+} from './car_report.types.ts';
 
 class ReportsService {
 	async getDriverReport(driverId: number, period: ReportPeriod): Promise<DriverReport> {
@@ -203,6 +212,206 @@ class ReportsService {
 			overtimePercentage,
 			avgHoursPerRoute,
 			avgKmPerRoute,
+		};
+	}
+
+	async getCarReport(carId: number, period: ReportPeriod): Promise<CarReport> {
+		// 1. get car info
+		const carInfo = await this.getCarInfo(carId);
+		if (!carInfo) {
+			throw new Error(`Car with id ${carId} not found`);
+		}
+
+		// 2. get routes
+		const routes = await this.getCarRoutes(carId, period);
+
+		// 3. summary
+		const summary = this.calculateSummary(routes, period);
+
+		// 4. drivers stats
+		const drivers = this.calculateDriversStats(routes);
+
+		// 5. efficiency
+		const efficiency = this.calculateEfficiency(summary, carInfo);
+
+		// 6. build report
+		return {
+			target: 'car',
+			period,
+			carInfo,
+			summary,
+			routes,
+			drivers,
+			efficiency,
+		};
+	}
+
+	// ================================
+	// 1. CAR INFO
+	//================================
+	private async getCarInfo(carId: number): Promise<CarInfo | null> {
+		const [rows] = await db.execute<any[]>(
+			`SELECT id, plate, model, type, capacity, status
+             FROM cars
+             WHERE id = ?`,
+			[carId]
+		);
+
+		if (!Array.isArray(rows) || rows.length === 0) return null;
+
+		const car = rows[0];
+
+		return {
+			carId: car.id,
+			plate: car.plate,
+			model: car.model,
+			type: car.type,
+			capacity: car.capacity,
+			status: car.status,
+		};
+	}
+
+	// ================================
+	// 2. ROUTES
+	// ================================
+	private async getCarRoutes(carId: number, period: ReportPeriod): Promise<CarRouteEntry[]> {
+		const [rows] = await db.execute<any[]>(
+			`SELECT 
+                r.id AS routeId,
+                r.date,
+                r.route_number,
+                r.start_location,
+                r.end_location,
+                r.planned_km,
+                r.actual_km,
+                r.planned_hours,
+                r.actual_hours,
+               GREATEST(r.actual_hours - r.planned_hours, 0) AS overtime_hours,
+                r.status,
+                u.id AS driverId,
+                u.first_name,
+                u.last_name
+            FROM routes r
+            LEFT JOIN users u ON u.id = r.driver_id
+            WHERE r.car_id = ?
+              AND r.date BETWEEN ? AND ?
+            ORDER BY r.date ASC`,
+			[carId, period.from, period.to]
+		);
+
+		return rows.map((r: any) => ({
+			routeId: r.routeId,
+			date: r.date,
+			routeNumber: r.route_number,
+			driver: {
+				id: r.driverId,
+				firstName: r.first_name,
+				lastName: r.last_name,
+			},
+			startLocation: r.start_location,
+			endLocation: r.end_location,
+			plannedKm: r.planned_km,
+			actualKm: r.actual_km,
+			plannedHours: r.planned_hours,
+			actualHours: r.actual_hours,
+			overtimeHours: r.overtime_hours,
+			status: r.status,
+		}));
+	}
+
+	// ================================
+	// 3. SUMMARY
+	// ================================
+	private calculateSummary(routes: CarRouteEntry[], period: ReportPeriod): CarSummary {
+		const totalKm = routes.reduce((sum, r) => sum + (r.actualKm || 0), 0);
+		const totalHours = routes.reduce((sum, r) => sum + (r.actualHours || 0), 0);
+
+		const routesCount = routes.length;
+
+		// days in period
+		const from = new Date(period.from);
+		const to = new Date(period.to);
+		const totalDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+		// days worked
+		const workedDates = new Set(routes.map((r) => r.date));
+		const daysWorked = workedDates.size;
+
+		const daysIdle = totalDays - daysWorked;
+
+		return {
+			totalKm,
+			totalHours,
+			routesCount,
+			daysWorked,
+			daysIdle,
+		};
+	}
+
+	// ================================
+	// 4. DRIVERS STATS
+	// ================================
+	private calculateDriversStats(routes: CarRouteEntry[]): CarDriverStats[] {
+		const map = new Map<number, CarDriverStats>();
+
+		for (const r of routes) {
+			if (!map.has(r.driver.id)) {
+				map.set(r.driver.id, {
+					driverId: r.driver.id,
+					firstName: r.driver.firstName,
+					lastName: r.driver.lastName,
+					routesCount: 0,
+					totalKm: 0,
+					totalHours: 0,
+				});
+			}
+
+			const d = map.get(r.driver.id)!;
+			d.routesCount++;
+			d.totalKm += r.actualKm || 0;
+			d.totalHours += r.actualHours || 0;
+		}
+
+		return Array.from(map.values());
+	}
+
+	// ================================
+	// 5. EFFICIENCY
+	// ================================
+	private calculateEfficiency(summary: CarSummary, carInfo: CarInfo): CarEfficiency {
+		const totalDays = summary.daysWorked + summary.daysIdle;
+
+		const usagePercentage =
+			totalDays > 0 ? Math.round((summary.daysWorked / totalDays) * 100) : 0;
+		const idlePercentage = 100 - usagePercentage;
+
+		const avgKmPerRoute = summary.routesCount > 0 ? summary.totalKm / summary.routesCount : 0;
+		const avgHoursPerRoute =
+			summary.routesCount > 0 ? summary.totalHours / summary.routesCount : 0;
+
+		// reliabilityScore — базова формула
+		let reliabilityScore = 100;
+
+		if (carInfo.status === 'repair') {
+			reliabilityScore -= 30;
+		}
+
+		if (idlePercentage > 70) {
+			reliabilityScore -= 20;
+		}
+
+		if (summary.totalKm < 100) {
+			reliabilityScore -= 10;
+		}
+
+		reliabilityScore = Math.max(0, Math.min(100, reliabilityScore));
+
+		return {
+			usagePercentage,
+			idlePercentage,
+			avgKmPerRoute,
+			avgHoursPerRoute,
+			reliabilityScore,
 		};
 	}
 }
