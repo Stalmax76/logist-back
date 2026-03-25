@@ -9,7 +9,7 @@ import type {
 	HelperStats,
 	OvertimeStats,
 	DriverEfficiency,
-} from './driver_reports.types.ts';
+} from './driver_report.types.ts';
 import type {
 	CarReport,
 	CarInfo,
@@ -19,14 +19,26 @@ import type {
 	CarEfficiency,
 } from './car_report.types.ts';
 
+import type {
+	RouteReport,
+	RouteInfo,
+	DriverInfo,
+	RouteStats,
+	RouteEfficiency,
+	RouteRaw,
+	RouteHelper,
+} from './route_report.types.ts';
+
 class ReportsService {
+	// ============================================= get driver report
+
 	async getDriverReport(driverId: number, period: ReportPeriod): Promise<DriverReport> {
 		//  Calculating the actual period range
 		const { from, to } = resolvePeriod(period);
 		//  Get driver routes
 		const routes = await this.getDriverRoutes(driverId, from, to);
 		//  We form a summry
-		const summary = this.buildDriverSummary(driverId, routes);
+		const summary = await this.buildDriverSummary(driverId, routes);
 		// We generate statistics on assistants
 		const helpers = this.buildHelpersStats(routes);
 		// We generate statistics on overtime
@@ -80,7 +92,10 @@ class ReportsService {
 	}
 
 	// build driver summary
-	private buildDriverSummary(driverId: number, routes: DriverRouteEntry[]): DriverSummary {
+	private async buildDriverSummary(
+		driverId: number,
+		routes: DriverRouteEntry[]
+	): Promise<DriverSummary> {
 		let totalHours = 0;
 		let totalKm = 0;
 
@@ -88,10 +103,22 @@ class ReportsService {
 			totalHours += r.actualHours;
 			totalKm += r.actualKm;
 		}
+		const driver = await this.getDriverInfo(driverId);
+		if (!driver) {
+			return {
+				driverId,
+				firstName: '',
+				lastName: '',
+				totalHours,
+				totalKm,
+				routesCount: routes.length,
+			};
+		}
 
 		return {
 			driverId,
-			driverName: 'John Doe', // change from db
+			firstName: driver.first_name,
+			lastName: driver.last_name,
 			totalHours,
 			totalKm,
 			routesCount: routes.length,
@@ -214,7 +241,15 @@ class ReportsService {
 			avgKmPerRoute,
 		};
 	}
+	private async getDriverInfo(driverId: number) {
+		const [rows]: any = await db.execute<any[]>(
+			'SELECT id, first_name, last_name FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+			[driverId]
+		);
+		return rows[0];
+	}
 
+	//  ===============================  car report ===============================
 	async getCarReport(carId: number, period: ReportPeriod): Promise<CarReport> {
 		// 1. get car info
 		const carInfo = await this.getCarInfo(carId);
@@ -412,6 +447,185 @@ class ReportsService {
 			avgKmPerRoute,
 			avgHoursPerRoute,
 			reliabilityScore,
+		};
+	}
+
+	// ================================ route report ================================
+	public async getRouteReport(routeId: number): Promise<RouteReport> {
+		try {
+			if (!routeId || isNaN(routeId) || routeId <= 0) {
+				throw new Error('Invalid routeId');
+			}
+
+			const routeRaw = await this.getRouteInfo(routeId);
+
+			if (!routeRaw) {
+				throw new Error('Route not found');
+			}
+			const routeInfo: RouteInfo = {
+				routeId: routeRaw.routeId,
+				date: routeRaw.date,
+				routeNumber: routeRaw.routeNumber,
+				startLocation: routeRaw.startLocation,
+				endLocation: routeRaw.endLocation,
+				status: routeRaw.status,
+			};
+			const helpers = await this.getRouteHelper(routeId);
+
+			const driver = await this.getRouteDriver(routeId);
+			const car = await this.getRouteCar(routeId);
+
+			const stats = this.buildRouteStats(routeRaw);
+			const efficiency = this.buildRouteEfficiency(stats);
+
+			return {
+				target: 'route',
+				routeInfo,
+				driver,
+				car,
+				helpers,
+				stats,
+				efficiency,
+			};
+		} catch (error) {
+			console.error('Error in getRouteReport:', error);
+			throw error;
+		}
+	}
+
+	private async getRouteInfo(routeId: number): Promise<RouteRaw | null> {
+		try {
+			const [rows] = await db.execute<any[]>(
+				`SELECT 
+                    r.id AS routeId,
+                    r.date,
+                    r.route_number AS routeNumber,
+                    r.start_location AS startLocation,
+                    r.end_location AS endLocation,
+                    r.status,
+                    r.planned_km,
+                    r.actual_km,
+                    r.planned_hours,
+                    r.actual_hours
+                FROM routes r
+                WHERE r.id = ?`,
+				[routeId]
+			);
+
+			if (!rows.length) return null;
+
+			return rows[0];
+		} catch (error) {
+			console.error('Error in getRouteInfo:', error);
+			throw error;
+		}
+	}
+	private async getRouteHelper(routeId: number): Promise<RouteHelper[]> {
+		try {
+			const [rows] = await db.execute<any[]>(
+				`SELECT helper_name FROM routes WHERE id = ? LIMIT 1`,
+				[routeId]
+			);
+
+			if (!rows.length || !rows[0].helper_name) return [] as RouteHelper[];
+
+			const names = rows[0].helper_name
+				.split(/[,:;|]/)
+				.map((n: string) => n.trim())
+				.filter(Boolean);
+
+			return names.map((name: string): RouteHelper => ({ helperName: name }));
+		} catch (error) {
+			console.error('Error in getRouteHelper:', error);
+			throw error;
+		}
+	}
+
+	private async getRouteDriver(routeId: number): Promise<DriverInfo> {
+		try {
+			const [rows] = await db.execute<any[]>(
+				`SELECT 
+                    u.id,
+                    u.first_name AS firstName,
+                    u.last_name AS lastName
+                FROM routes r
+                LEFT JOIN users u ON u.id = r.driver_id
+                WHERE r.id = ?`,
+				[routeId]
+			);
+
+			if (!rows.length) {
+				throw new Error(`Driver for route ${routeId} not found`);
+			}
+
+			return rows[0];
+		} catch (error) {
+			console.error('Error in getRouteDriver:', error);
+			throw error;
+		}
+	}
+
+	private async getRouteCar(routeId: number): Promise<CarInfo> {
+		try {
+			const [rows] = await db.execute<any[]>(
+				`SELECT 
+                    c.id AS carId,
+                    c.plate,
+                    c.model,
+                    c.type,
+                    c.capacity,
+                    c.status
+                FROM routes r
+                LEFT JOIN cars c ON c.id = r.car_id
+                WHERE r.id = ?`,
+				[routeId]
+			);
+
+			if (!rows.length) {
+				throw new Error(`Car for route ${routeId} not found`);
+			}
+
+			return rows[0];
+		} catch (error) {
+			console.error('Error in getRouteCar:', error);
+			throw error;
+		}
+	}
+
+	private buildRouteStats(route: any): RouteStats {
+		const plannedKm = route.planned_km ?? 0;
+		const actualKm = route.actual_km ?? 0;
+		const plannedHours = route.planned_hours ?? 0;
+		const actualHours = route.actual_hours ?? 0;
+		const overtimeHours = Math.max(0, actualHours - plannedHours);
+
+		return {
+			plannedKm,
+			actualKm,
+			plannedHours,
+			actualHours,
+			overtimeHours,
+		};
+	}
+
+	private buildRouteEfficiency(stats: RouteStats): RouteEfficiency {
+		const kmDiff = Math.abs(stats.actualKm - stats.plannedKm);
+		const hoursDiff = Math.abs(stats.actualHours - stats.plannedHours);
+
+		const kmAccuracy = Math.max(0, 100 - kmDiff * 2);
+		const hoursAccuracy = Math.max(0, 100 - hoursDiff * 5);
+
+		const onTime = stats.actualHours <= stats.plannedHours;
+
+		const efficiencyScore = Math.round(
+			kmAccuracy * 0.3 + hoursAccuracy * 0.4 + (onTime ? 30 : 0)
+		);
+
+		return {
+			onTime,
+			kmAccuracy,
+			hoursAccuracy,
+			efficiencyScore,
 		};
 	}
 }

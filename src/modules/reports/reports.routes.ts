@@ -5,5 +5,6 @@ const router = Router();
 
 router.get('/driver', reportsController.getDriverReport);
 router.get('/car', reportsController.getCarReport);
+router.get('/route', reportsController.getRouteReport);
 
 export default router;

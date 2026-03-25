@@ -33,7 +33,8 @@ export interface DriverRouteEntry {
 // -----------------------------
 export interface DriverSummary {
 	driverId: number;
-	driverName: string;
+	firstName: string;
+	lastName: string;
 	totalHours: number;
 	totalKm: number;
 	routesCount: number;

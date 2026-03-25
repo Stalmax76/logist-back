@@ -111,6 +111,28 @@ class ReportsController {
 			return res.status(500).json({ error: 'Internal server error' });
 		}
 	}
+
+	getRouteReport = async (req: Request, res: Response) => {
+		try {
+			const routeId = Number(req.query.routeId);
+
+			if (!routeId || isNaN(routeId) || routeId <= 0) {
+				return res.status(400).json({ error: 'routeId must be a positive number' });
+			}
+
+			const report = await reportsService.getRouteReport(routeId);
+
+			return res.json(report);
+		} catch (error: any) {
+			console.error('Error in getRouteReport controller:', error);
+
+			if (error instanceof Error && error.message.includes('not found')) {
+				return res.status(404).json({ error: error.message });
+			}
+
+			return res.status(500).json({ error: 'Internal server error' });
+		}
+	};
 }
 
 export default new ReportsController();
